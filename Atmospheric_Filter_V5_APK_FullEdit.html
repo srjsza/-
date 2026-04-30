@@ -1,0 +1,197 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>氛围滤镜工坊 V5 - Pro APK Fix</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&display=swap');
+        body { background: #0c0c0e; font-family: 'Noto Sans SC', sans-serif; color: #e4e4e7; overflow-x: hidden; -webkit-tap-highlight-color: transparent; }
+        .glass-card { background: #18181b; border: 1px solid #27272a; border-radius: 28px; }
+        .canvas-area { background: #000; border-radius: 16px; overflow: hidden; position: relative; aspect-ratio: 4/5; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 0 40px rgba(0,0,0,0.5); }
+        canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
+        .btn-p { padding: 12px; border-radius: 14px; font-size: 12px; font-weight: 600; background: #27272a; border: 1px solid rgba(255,255,255,0.03); text-align: center; transition: all 0.2s; }
+        .active-btn { border: 1px solid #6366f1; background: rgba(99, 102, 241, 0.2) !important; }
+        input[type=range] { -webkit-appearance: none; width: 100%; height: 3px; background: #3f3f46; border-radius: 2px; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 20px; width: 20px; border-radius: 50%; background: #fff; box-shadow: 0 0 10px rgba(0,0,0,0.5); }
+        #imgModal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); z-index:1000; flex-direction:column; align-items:center; justify-content:center; }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+    <div class="glass-card w-full max-w-md p-5 space-y-5">
+        <div class="flex justify-between items-center">
+            <div>
+                <h1 class="text-lg font-bold text-white tracking-tight">氛围滤镜工坊 V5</h1>
+                <p class="text-[9px] text-zinc-500 font-mono">APK STABLE & FULL EDIT</p>
+            </div>
+            <label class="bg-indigo-600 text-white text-xs font-bold px-5 py-2 rounded-full cursor-pointer active:scale-95 transition-transform">
+                导入 <input type="file" id="upload" hidden accept="image/*">
+            </label>
+        </div>
+
+        <div class="canvas-area">
+            <canvas id="mainCanvas"></canvas>
+            <div id="hint" class="absolute text-zinc-500 text-xs text-center">点上方按钮导入</div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2">
+            <button onclick="setPreset('dreamcore')" class="btn-p">梦核</button>
+            <button onclick="setPreset('korean')" class="btn-p">韩系</button>
+            <button onclick="setPreset('leica')" class="btn-p">徕卡</button>
+            <button onclick="setPreset('ditto')" class="btn-p text-blue-300">Ditto</button>
+            <button onclick="setPreset('fuji')" class="btn-p text-emerald-300">富士</button>
+            <button onclick="setPreset('berlin')" class="btn-p text-cyan-300">柏林</button>
+        </div>
+
+        <div class="space-y-4 pt-2">
+            <div class="grid grid-cols-3 gap-4">
+                <div class="space-y-1 text-center">
+                    <span class="text-[10px] text-zinc-500 block">朦胧感</span>
+                    <input type="range" id="bloom" min="0" max="100" value="0">
+                </div>
+                <div class="space-y-1 text-center">
+                    <span class="text-[10px] text-zinc-500 block">胶片颗粒</span>
+                    <input type="range" id="grain" min="0" max="100" value="0">
+                </div>
+                <div class="space-y-1 text-center">
+                    <span class="text-[10px] text-zinc-500 block">像素/锐度</span>
+                    <input type="range" id="pixel" min="1" max="10" value="1">
+                </div>
+            </div>
+            <button id="downloadBtn" class="w-full bg-white text-black py-4 rounded-xl font-bold text-sm active:bg-zinc-200">保存/长按导出图片</button>
+        </div>
+    </div>
+
+    <!-- Fallback Modal for APK -->
+    <div id="imgModal" onclick="this.style.display='none'">
+        <p class="text-white text-sm font-bold mb-6">长按图片保存到相册</p>
+        <img id="resultImg" class="max-w-[95%] max-h-[75%] rounded-lg shadow-2xl">
+        <p class="text-zinc-400 text-xs mt-8">点击背景返回编辑</p>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('mainCanvas');
+        const ctx = canvas.getContext('2d');
+        const upload = document.getElementById('upload');
+        const modal = document.getElementById('imgModal');
+        const resultImg = document.getElementById('resultImg');
+        let imgObj = null;
+        let currentMode = 'none';
+
+        const configs = {
+            dreamcore: { bloom: 82, grain: 68, pixel: 5, c: 1.1, b: 1.0, s: 1.2, tint: [1.0, 1.0, 1.1], lift: 0 },
+            korean: { bloom: 48, grain: 12, pixel: 1, c: 0.95, b: 1.15, s: 0.85, tint: [1.05, 1.02, 1.05], lift: 0 },
+            leica: { bloom: 10, grain: 20, pixel: 1, c: 1.3, b: 0.9, s: 1.05, tint: [0.98, 1.0, 1.05], lift: 5 },
+            ditto: { bloom: 60, grain: 90, pixel: 2, c: 1.05, b: 1.0, s: 0.9, tint: [1.05, 1.02, 0.95], lift: 30, shadowTint: [5, 2, -5] },
+            fuji: { bloom: 15, grain: 35, pixel: 1, c: 1.2, b: 0.95, s: 0.8, tint: [1.0, 1.05, 1.0], shadowTint: [-5, 5, 2], lift: 10 },
+            berlin: { bloom: 95, grain: 45, pixel: 1, c: 0.85, b: 1.05, s: 0.7, tint: [0.9, 1.0, 1.1], shadowTint: [0, 5, 15], lift: 40 }
+        };
+
+        upload.onchange = (e) => {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                const img = new Image();
+                img.onload = () => {
+                    imgObj = img;
+                    canvas.width = img.width; canvas.height = img.height;
+                    document.getElementById('hint').style.display = 'none';
+                    render();
+                };
+                img.src = ev.target.result;
+            };
+            reader.readAsDataURL(e.target.files[0]);
+        };
+
+        function setPreset(m) {
+            currentMode = m;
+            const p = configs[m];
+            document.getElementById('bloom').value = p.bloom;
+            document.getElementById('grain').value = p.grain;
+            document.getElementById('pixel').value = p.pixel;
+            
+            document.querySelectorAll('.btn-p').forEach(b => b.classList.remove('active-btn'));
+            const target = Array.from(document.querySelectorAll('.btn-p')).find(b => b.innerText.includes(m==='ditto'?'Ditto':m==='fuji'?'富士':m==='berlin'?'柏林':m==='leica'?'徕卡':m==='dreamcore'?'梦核':'韩系'));
+            if(target) target.classList.add('active-btn');
+            
+            render();
+        }
+
+        function render() {
+            if(!imgObj) return;
+            const bVal = parseInt(document.getElementById('bloom').value);
+            const gVal = parseInt(document.getElementById('grain').value);
+            const pVal = parseInt(document.getElementById('pixel').value);
+            const p = configs[currentMode] || {c:1, b:1, s:1, tint:[1,1,1], lift:0};
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if(pVal > 1) {
+                const sw = canvas.width / pVal; const sh = canvas.height / pVal;
+                ctx.drawImage(imgObj, 0, 0, sw, sh);
+                ctx.imageSmoothingEnabled = false;
+                ctx.drawImage(canvas, 0, 0, sw, sh, 0, 0, canvas.width, canvas.height);
+            } else {
+                ctx.drawImage(imgObj, 0, 0);
+            }
+
+            let idata = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            let d = idata.data;
+            for(let i=0; i<d.length; i+=4) {
+                let r = d[i] * p.tint[0];
+                let g = d[i+1] * p.tint[1];
+                let bl = d[i+2] * p.tint[2];
+                r = (r - 128) * p.c + 128 * p.b;
+                g = (g - 128) * p.c + 128 * p.b;
+                bl = (bl - 128) * p.c + 128 * p.b;
+                const lum = 0.299*r + 0.587*g + 0.114*bl;
+                r = lum + p.s * (r - lum);
+                g = lum + p.s * (g - lum);
+                bl = lum + p.s * (bl - lum);
+                if(p.shadowTint && lum < 128) {
+                    const factor = (1 - lum/128);
+                    r += p.shadowTint[0] * factor; g += p.shadowTint[1] * factor; bl += p.shadowTint[2] * factor;
+                }
+                d[i] = Math.min(255, Math.max(p.lift, r));
+                d[i+1] = Math.min(255, Math.max(p.lift, g));
+                d[i+2] = Math.min(255, Math.max(p.lift, bl));
+            }
+            ctx.putImageData(idata, 0, 0);
+
+            if(bVal > 0) {
+                ctx.globalCompositeOperation = 'screen';
+                ctx.filter = `blur(${bVal/5}px) brightness(1.05)`;
+                ctx.globalAlpha = bVal / 220;
+                ctx.drawImage(canvas, 0, 0);
+                ctx.globalAlpha = 1.0; ctx.filter = 'none'; ctx.globalCompositeOperation = 'source-over';
+            }
+
+            if(gVal > 0) {
+                idata = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                d = idata.data;
+                for(let i=0; i<d.length; i+=4) {
+                    const n = (Math.random() - 0.5) * gVal * 1.5;
+                    d[i]+=n; d[i+1]+=n; d[i+2]+=n;
+                }
+                ctx.putImageData(idata, 0, 0);
+            }
+        }
+
+        document.querySelectorAll('input[type=range]').forEach(i => i.oninput = render);
+        
+        document.getElementById('downloadBtn').onclick = () => {
+            if(!imgObj) return;
+            const dataUrl = canvas.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.download = `Vibe_V5.png`;
+            link.href = dataUrl;
+            link.click();
+            setTimeout(() => {
+                resultImg.src = dataUrl;
+                modal.style.display = 'flex';
+            }, 600);
+        };
+    </script>
+</body>
+</html>
